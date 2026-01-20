@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Registration</title>
+
+<style>
+body{
+  font-family: Arial, sans-serif;
+  background:#f4f6f9;
+  padding:15px;
+}
+.container{
+  max-width:420px;
+  background:#fff;
+  margin:auto;
+  padding:20px;
+  border-radius:12px;
+}
+label{
+  font-weight:bold;
+  margin-top:10px;
+  display:block;
+}
+input,button{
+  width:100%;
+  padding:10px;
+  margin-top:5px;
+}
+button{
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  margin-top:15px;
+}
+video,canvas{
+  width:100%;
+  border-radius:8px;
+  margin-top:8px;
+}
+#location,#timeBox{
+  background:#eef2ff;
+  padding:10px;
+  margin-top:10px;
+  border-radius:6px;
+  font-size:14px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>Student Registration</h2>
+
+<button onclick="startCamera()">🎥 Start Camera</button>
+<video id="video" playsinline muted></video>
+
+<button onclick="capturePhoto()">📸 Capture Photo</button>
+<canvas id="canvas" hidden></canvas>
+
+<label>Name</label>
+<input id="name" required>
+
+<label>Email</label>
+<input id="email" type="email" required>
+
+<label>Class</label>
+<input id="className" required>
+
+<label>Phone</label>
+<input id="phone" pattern="[0-9]{10}" required>
+
+<div id="timeBox">🕒 Capturing time…</div>
+<div id="location">📍 Detecting location…</div>
+
+<button onclick="submitForm()">Submit</button>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxCJRIc1DTx7lARrtYx6QNx3bjWKna2t3OL_K-t7m_Z_cF7Mn_RPFrb4N3z6zZuRrFT/exec";
+
+let photoData = "";
+let locationText = "";
+let dateTimeText = "";
+
+// ---------- CAMERA ----------
+async function startCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:"environment" }
+  });
+  video.srcObject = stream;
+  await video.play();
+}
+
+function capturePhoto(){
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video,0,0);
+  canvas.hidden = false;
+  photoData = canvas.toDataURL("image/png");
+}
+
+// ---------- REAL-TIME DATE & TIME ----------
+function updateTime(){
+  const now = new Date();
+  dateTimeText = now.toLocaleString(); // device local time
+  document.getElementById("timeBox").innerText =
+    "🕒 Date & Time: " + dateTimeText;
+}
+updateTime();
+setInterval(updateTime, 1000); // live ticking display
+
+// ---------- LOCATION ----------
+navigator.geolocation.getCurrentPosition(pos=>{
+  locationText = `Lat:${pos.coords.latitude}, Lon:${pos.coords.longitude}`;
+  location.innerText = locationText;
+});
+
+// ---------- SUBMIT ----------
+function submitForm(){
+  if(!photoData){
+    alert("Capture photo first");
+    return;
+  }
+
+  // lock final submit time
+  const finalTime = new Date().toLocaleString();
+
+  fetch(SCRIPT_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      name: name.value,
+      email: email.value,
+      className: className.value,
+      phone: phone.value,
+      datetime: finalTime,
+      location: locationText,
+      photo: photoData
+    })
+  })
+  .then(res=>res.json())
+  .then(()=>alert("✅ Submitted successfully"))
+  .catch(()=>alert("❌ Submission failed"));
+}
+</script>
+
+</body>
+</html>

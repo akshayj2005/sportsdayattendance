@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Submitted Student Details</title>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background:#f4f6f9;
+    padding:15px;
+}
+.container{
+    max-width:420px;
+    background:#fff;
+    margin:auto;
+    padding:20px;
+    border-radius:12px;
+}
+h2{
+    text-align:center;
+    margin-bottom:15px;
+}
+img{
+    width:100%;
+    border-radius:10px;
+    margin-bottom:15px;
+}
+.detail{
+    margin-bottom:10px;
+    font-size:15px;
+}
+.label{
+    font-weight:bold;
+}
+button{
+    width:100%;
+    padding:10px;
+    margin-top:15px;
+    font-size:15px;
+    background:#2563eb;
+    color:white;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container" id="output">
+    Loading data...
+</div>
+
+<script>
+const data = JSON.parse(localStorage.getItem("studentData"));
+
+if(!data){
+    document.getElementById("output").innerHTML =
+        "<h2>No data found</h2><p>Please submit the form first.</p>";
+}else{
+    document.getElementById("output").innerHTML = `
+        <h2>Student Submission</h2>
+
+        <img src="${data.photo}" alt="Captured Photo">
+
+        <div class="detail"><span class="label">Name:</span> ${data.name}</div>
+        <div class="detail"><span class="label">Email:</span> ${data.email}</div>
+        <div class="detail"><span class="label">Class:</span> ${data.class}</div>
+        <div class="detail"><span class="label">Date & Time:</span> ${data.datetime}</div>
+        <div class="detail"><span class="label">Location:</span><br>${data.location}</div>
+
+        <button onclick="goBack()">⬅ Back</button>
+    `;
+}
+
+function goBack(){
+    window.location.href = "index.html";
+}
+</script>
+
+</body>
+</html>
