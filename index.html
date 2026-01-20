@@ -3,67 +3,42 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Campus Restricted Student Form</title>
+<title>Sports Day Attendance</title>
 
 <style>
-body{
-  font-family: Arial, sans-serif;
-  background:#f4f6f9;
-  padding:15px;
-}
-.container{
-  max-width:420px;
-  background:#fff;
-  margin:auto;
-  padding:20px;
-  border-radius:12px;
-}
+body{font-family:Arial;background:#f4f6f9;padding:15px}
+.container{max-width:420px;background:#fff;margin:auto;padding:20px;border-radius:12px}
 h2{text-align:center}
-input,button{
-  width:100%;
-  padding:10px;
-  margin-top:8px;
-  font-size:15px;
-}
-button{
-  background:#2563eb;
-  color:#fff;
-  border:none;
-  border-radius:6px;
-}
-video,canvas{
-  width:100%;
-  border-radius:8px;
-  margin-top:10px;
-}
-.status{
-  margin-top:10px;
-  font-weight:bold;
-  font-size:14px;
-}
-.allowed{color:green}
-.blocked{color:red}
+input,button{width:100%;padding:10px;margin-top:8px;font-size:15px}
+button{background:#2563eb;color:#fff;border:none;border-radius:6px}
+video,canvas{width:100%;border-radius:8px;margin-top:10px}
+.status{margin-top:10px;font-weight:bold}
+.ok{color:green}
+.err{color:red}
+small{color:#555}
 </style>
 </head>
 
 <body>
 
 <div class="container">
-<h2>Student Verification</h2>
+<h2>Sports Day Attendance</h2>
 
 <button onclick="startVerification()">▶ Start Verification</button>
 
 <video id="video" playsinline muted hidden></video>
 <canvas id="canvas" hidden></canvas>
 
-<input id="name" placeholder="Name" required>
+<input id="name" placeholder="Student Name" required>
 <input id="email" type="email" placeholder="Email" required>
 <input id="className" placeholder="Class" required>
-<input id="phone" pattern="[0-9]{10}" placeholder="Phone" required>
+<input id="phone" placeholder="Phone (10 digits)" required>
 
-<div class="status" id="time">🕒 Time: Waiting</div>
-<div class="status" id="location">📍 Verifying location…</div>
-<div class="status" id="photo">📷 Photo: Waiting</div>
+<button onclick="verifyLocation()">📍 Verify Location</button>
+
+<div class="status" id="time">🕒 Time: Waiting…</div>
+<div class="status" id="location">📍 Location not verified</div>
+<div class="status" id="photo">📷 Photo: Waiting…</div>
 
 <button id="submitBtn" onclick="submitForm()" disabled>Submit</button>
 </div>
@@ -72,30 +47,28 @@ video,canvas{
 /* ================= CONFIG ================= */
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxCJRIc1DTx7lARrtYx6QNx3bjWKna2t3OL_K-t7m_Z_cF7Mn_RPFrb4N3z6zZuRrFT/exec";
 
-/* ================= GEOFENCE DATA ================= */
+/* ================= CAMPUSES (REALISTIC RADIUS) ================= */
 const CAMPUSES = [
-  { name:"BVIMR College, Paschim Vihar, Delhi", lat:28.676370, lon:77.112480, r:200 },
-  { name:"BVICAM College, Paschim Vihar, Delhi", lat:28.675120, lon:77.113860, r:200 },
-  { name:"BVCOE College, Paschim Vihar, Delhi",  lat:28.678520, lon:77.111930, r:200 }
+  { lat:28.676370, lon:77.112480, r:350 }, // BVIMR
+  { lat:28.675120, lon:77.113860, r:350 }, // BVICAM
+  { lat:28.678520, lon:77.111930, r:350 }  // BVCOE
 ];
 
 let photoData = "";
-let locationText = "";
 let timeText = "";
 let allowed = false;
 
-/* ================= START FLOW ================= */
+/* ================= START ================= */
 async function startVerification(){
-  await startCamera();
   captureTime();
-  captureLocation();
-  setTimeout(capturePhoto, 2500); // auto photo after 2.5 sec
+  await startCamera();
+  setTimeout(capturePhoto, 2000);
 }
 
 /* ================= FRONT CAMERA ================= */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:"user" } // FRONT CAMERA
+    video:{ facingMode:"user" }
   });
   video.srcObject = stream;
   video.hidden = false;
@@ -109,87 +82,113 @@ function capturePhoto(){
   canvas.getContext("2d").drawImage(video,0,0);
   canvas.hidden = false;
   photoData = canvas.toDataURL("image/png");
-  photo.innerText = "📷 Photo: Captured";
+  photo.innerHTML = "📷 Photo: <span class='ok'>Captured</span>";
   checkReady();
 }
 
 /* ================= TIME ================= */
 function captureTime(){
   timeText = new Date().toLocaleString();
-  time.innerText = "🕒 Time: " + timeText;
+  time.innerHTML = "🕒 Time: " + timeText;
 }
 
 /* ================= DISTANCE (METERS) ================= */
 function distance(lat1, lon1, lat2, lon2){
   const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
   const a =
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) *
-    Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* ================= LOCATION + GEOFENCE ================= */
-function captureLocation(){
+/* ================= LOCATION (FIXED & WORKING) ================= */
+function verifyLocation(){
+  if(!navigator.geolocation){
+    location.innerHTML = "❌ GPS not supported";
+    return;
+  }
+
+  location.innerHTML = "📍 Checking location…";
+
   navigator.geolocation.getCurrentPosition(
     pos=>{
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy; // meters
 
       allowed = false;
-      locationText = "";
 
       for(const c of CAMPUSES){
-        if(distance(lat, lon, c.lat, c.lon) <= c.r){
+        const d = distance(lat, lon, c.lat, c.lon);
+
+        // ✅ REAL-WORLD LOGIC (distance adjusted by accuracy)
+        if ((d - accuracy) <= c.r) {
           allowed = true;
-          locationText = c.name;
           break;
         }
       }
 
       if(allowed){
         location.innerHTML =
-          "📍 Location Verified: <span class='allowed'>" + locationText + "</span>";
-      }else{
+          "✅ <span class='ok'>Location Verified</span>";
+      } else {
         location.innerHTML =
-          "❌ Not inside BVIMR / BVICAM / BVCOE (200m)";
+          "❌ <span class='err'>Location not verified</span><br>" +
+          "<small>GPS accuracy: " + Math.round(accuracy) + " m</small>";
       }
 
       checkReady();
     },
     ()=>{
-      location.innerHTML = "❌ Location permission denied";
+      location.innerHTML =
+        "❌ <span class='err'>Location permission denied</span>";
     },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+    {
+      enableHighAccuracy:true,
+      timeout:25000,
+      maximumAge:0
+    }
   );
 }
 
-/* ================= READY CHECK ================= */
+/* ================= READY ================= */
 function checkReady(){
-  if(photoData && allowed){
-    submitBtn.disabled = false;
-  }
+  submitBtn.disabled = !(photoData && allowed);
 }
 
 /* ================= SUBMIT ================= */
 function submitForm(){
+
+  if(
+    !name.value.trim() ||
+    !email.value.trim() ||
+    !className.value.trim() ||
+    !phone.value.match(/^[0-9]{10}$/) ||
+    !photoData ||
+    !allowed
+  ){
+    alert("All fields required and location must be verified");
+    return;
+  }
+
   fetch(SCRIPT_URL,{
     method:"POST",
     body:JSON.stringify({
-      name: name.value,
-      email: email.value,
-      className: className.value,
-      phone: phone.value,
-      datetime: timeText,
-      location: locationText,
-      photo: photoData
+      name:name.value.trim(),
+      email:email.value.trim(),
+      className:className.value.trim(),
+      phone:phone.value.trim(),
+      datetime:timeText,
+      location:"Location Verified",
+      photo:photoData
     })
   })
-  .then(()=>alert("✅ Submitted Successfully"))
-  .catch(()=>alert("❌ Submission Failed"));
+  .then(()=>alert("✅ Attendance Submitted"))
+  .catch(()=>alert("❌ Submission failed"));
 }
 </script>
 
