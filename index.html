@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Student Registration</title>
+<title>Campus Restricted Student Form</title>
 
 <style>
 body{
@@ -18,117 +18,164 @@ body{
   padding:20px;
   border-radius:12px;
 }
-label{
-  font-weight:bold;
-  margin-top:10px;
-  display:block;
-}
+h2{text-align:center}
 input,button{
   width:100%;
   padding:10px;
-  margin-top:5px;
+  margin-top:8px;
+  font-size:15px;
 }
 button{
   background:#2563eb;
   color:#fff;
   border:none;
   border-radius:6px;
-  margin-top:15px;
 }
 video,canvas{
   width:100%;
   border-radius:8px;
-  margin-top:8px;
-}
-#location,#timeBox{
-  background:#eef2ff;
-  padding:10px;
   margin-top:10px;
-  border-radius:6px;
+}
+.status{
+  margin-top:10px;
+  font-weight:bold;
   font-size:14px;
 }
+.allowed{color:green}
+.blocked{color:red}
 </style>
 </head>
 
 <body>
 
 <div class="container">
-<h2>Student Registration</h2>
+<h2>Student Verification</h2>
 
-<button onclick="startCamera()">🎥 Start Camera</button>
-<video id="video" playsinline muted></video>
+<button onclick="startVerification()">▶ Start Verification</button>
 
-<button onclick="capturePhoto()">📸 Capture Photo</button>
+<video id="video" playsinline muted hidden></video>
 <canvas id="canvas" hidden></canvas>
 
-<label>Name</label>
-<input id="name" required>
+<input id="name" placeholder="Name" required>
+<input id="email" type="email" placeholder="Email" required>
+<input id="className" placeholder="Class" required>
+<input id="phone" pattern="[0-9]{10}" placeholder="Phone" required>
 
-<label>Email</label>
-<input id="email" type="email" required>
+<div class="status" id="time">🕒 Time: Waiting</div>
+<div class="status" id="location">📍 Verifying location…</div>
+<div class="status" id="photo">📷 Photo: Waiting</div>
 
-<label>Class</label>
-<input id="className" required>
-
-<label>Phone</label>
-<input id="phone" pattern="[0-9]{10}" required>
-
-<div id="timeBox">🕒 Capturing time…</div>
-<div id="location">📍 Detecting location…</div>
-
-<button onclick="submitForm()">Submit</button>
+<button id="submitBtn" onclick="submitForm()" disabled>Submit</button>
 </div>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxCJRIc1DTx7lARrtYx6QNx3bjWKna2t3OL_K-t7m_Z_cF7Mn_RPFrb4N3z6zZuRrFT/exec";
+/* ================= CONFIG ================= */
+const SCRIPT_URL = "PASTE_SCRIPT_URL_HERE";
+
+/* ================= GEOFENCE DATA ================= */
+const CAMPUSES = [
+  { name:"BVIMR College, Paschim Vihar, Delhi", lat:28.676370, lon:77.112480, r:200 },
+  { name:"BVICAM College, Paschim Vihar, Delhi", lat:28.675120, lon:77.113860, r:200 },
+  { name:"BVCOE College, Paschim Vihar, Delhi",  lat:28.678520, lon:77.111930, r:200 }
+];
 
 let photoData = "";
 let locationText = "";
-let dateTimeText = "";
+let timeText = "";
+let allowed = false;
 
-// ---------- CAMERA ----------
+/* ================= START FLOW ================= */
+async function startVerification(){
+  await startCamera();
+  captureTime();
+  captureLocation();
+  setTimeout(capturePhoto, 2500); // auto photo after 2.5 sec
+}
+
+/* ================= FRONT CAMERA ================= */
 async function startCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:"environment" }
+    video:{ facingMode:"user" } // FRONT CAMERA
   });
   video.srcObject = stream;
+  video.hidden = false;
   await video.play();
 }
 
+/* ================= PHOTO ================= */
 function capturePhoto(){
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   canvas.getContext("2d").drawImage(video,0,0);
   canvas.hidden = false;
   photoData = canvas.toDataURL("image/png");
+  photo.innerText = "📷 Photo: Captured";
+  checkReady();
 }
 
-// ---------- REAL-TIME DATE & TIME ----------
-function updateTime(){
-  const now = new Date();
-  dateTimeText = now.toLocaleString(); // device local time
-  document.getElementById("timeBox").innerText =
-    "🕒 Date & Time: " + dateTimeText;
+/* ================= TIME ================= */
+function captureTime(){
+  timeText = new Date().toLocaleString();
+  time.innerText = "🕒 Time: " + timeText;
 }
-updateTime();
-setInterval(updateTime, 1000); // live ticking display
 
-// ---------- LOCATION ----------
-navigator.geolocation.getCurrentPosition(pos=>{
-  locationText = `Lat:${pos.coords.latitude}, Lon:${pos.coords.longitude}`;
-  location.innerText = locationText;
-});
+/* ================= DISTANCE (METERS) ================= */
+function distance(lat1, lon1, lat2, lon2){
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-// ---------- SUBMIT ----------
-function submitForm(){
-  if(!photoData){
-    alert("Capture photo first");
-    return;
+/* ================= LOCATION + GEOFENCE ================= */
+function captureLocation(){
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      allowed = false;
+      locationText = "";
+
+      for(const c of CAMPUSES){
+        if(distance(lat, lon, c.lat, c.lon) <= c.r){
+          allowed = true;
+          locationText = c.name;
+          break;
+        }
+      }
+
+      if(allowed){
+        location.innerHTML =
+          "📍 Location Verified: <span class='allowed'>" + locationText + "</span>";
+      }else{
+        location.innerHTML =
+          "❌ Not inside BVIMR / BVICAM / BVCOE (200m)";
+      }
+
+      checkReady();
+    },
+    ()=>{
+      location.innerHTML = "❌ Location permission denied";
+    },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+  );
+}
+
+/* ================= READY CHECK ================= */
+function checkReady(){
+  if(photoData && allowed){
+    submitBtn.disabled = false;
   }
+}
 
-  // lock final submit time
-  const finalTime = new Date().toLocaleString();
-
+/* ================= SUBMIT ================= */
+function submitForm(){
   fetch(SCRIPT_URL,{
     method:"POST",
     body:JSON.stringify({
@@ -136,14 +183,13 @@ function submitForm(){
       email: email.value,
       className: className.value,
       phone: phone.value,
-      datetime: finalTime,
+      datetime: timeText,
       location: locationText,
       photo: photoData
     })
   })
-  .then(res=>res.json())
-  .then(()=>alert("✅ Submitted successfully"))
-  .catch(()=>alert("❌ Submission failed"));
+  .then(()=>alert("✅ Submitted Successfully"))
+  .catch(()=>alert("❌ Submission Failed"));
 }
 </script>
 
