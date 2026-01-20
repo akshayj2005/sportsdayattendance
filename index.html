@@ -124,6 +124,7 @@ function verifyLocation(){
       const accuracy = pos.coords.accuracy || 50; // meters, default to 50 if undefined
 
       console.log("GPS Position:", { lat, lon, accuracy });
+      console.log("Your coordinates:", lat, lon);
       
       allowed = false;
       let closestDistance = Infinity;
@@ -138,13 +139,15 @@ function verifyLocation(){
           closestCampus = c;
         }
 
-        // ✅ LENIENT LOGIC: Account for GPS accuracy uncertainty
-        // Allow if distance is within (radius + accuracy + buffer)
-        // This ensures users inside campus are verified even with GPS inaccuracy
-        const buffer = 100; // Extra buffer for GPS variations and building interference
-        const effectiveRadius = c.r + accuracy + buffer;
+        // ✅ VERY LENIENT LOGIC: Account for GPS accuracy uncertainty and building interference
+        // Multiple checks to ensure users inside campus are verified
+        const buffer = 200; // Large buffer for GPS variations, building interference, and indoor use
+        const effectiveRadius = c.r + Math.max(accuracy, 50) + buffer; // Use at least 50m accuracy even if GPS reports lower
         
-        if (d <= effectiveRadius) {
+        // Check multiple conditions for maximum leniency
+        if (d <= effectiveRadius || 
+            d <= (c.r + 250) ||  // Simple check: within 300 + 250 = 550m
+            (d - accuracy) <= (c.r + 100)) {  // Worst case scenario check
           allowed = true;
           console.log("✅ Location verified! Distance:", Math.round(d), "Effective radius:", Math.round(effectiveRadius));
           break;
@@ -156,10 +159,11 @@ function verifyLocation(){
           "✅ <span class='ok'>Location Verified</span><br>" +
           "<small>Distance: " + Math.round(closestDistance) + " m, Accuracy: " + Math.round(accuracy) + " m</small>";
       } else {
+        const effectiveRadius = closestCampus ? closestCampus.r + Math.max(accuracy, 50) + 200 : 550;
         location.innerHTML =
           "❌ <span class='err'>Location not verified</span><br>" +
           "<small>Distance: " + Math.round(closestDistance) + " m, Accuracy: " + Math.round(accuracy) + " m</small><br>" +
-          "<small>Required: within " + (closestCampus ? closestCampus.r : 350) + " m radius</small>";
+          "<small>Required: within " + Math.round(effectiveRadius) + " m (base: " + (closestCampus ? closestCampus.r : 300) + " m)</small>";
       }
 
       checkReady();
@@ -228,6 +232,18 @@ function submitForm(){
   .then(()=>alert("✅ Attendance Submitted"))
   .catch(()=>alert("❌ Submission failed"));
 }
+
+/* ================= AUTO-RUN LOCATION VERIFICATION ================= */
+// Auto-run location verification when page loads
+window.addEventListener('DOMContentLoaded', () => {
+  // Run immediately
+  verifyLocation();
+  
+  // Also run every 10 seconds to keep checking
+  setInterval(() => {
+    verifyLocation();
+  }, 10000);
+});
 </script>
 
 </body>
