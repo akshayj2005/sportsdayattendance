@@ -37,7 +37,7 @@ small{color:#555}
 <button onclick="verifyLocation()">📍 Verify Location</button>
 
 <div class="status" id="time">🕒 Time: Waiting…</div>
-<div class="status" id="location">📍 Location not verified</div>
+<div class="status" id="location">📍 Location: <span class="err">Not verified</span></div>
 <div class="status" id="photo">📷 Photo: Waiting…</div>
 
 <button id="submitBtn" onclick="submitForm()" disabled>Submit</button>
@@ -47,11 +47,11 @@ small{color:#555}
 /* ================= CONFIG ================= */
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxCJRIc1DTx7lARrtYx6QNx3bjWKna2t3OL_K-t7m_Z_cF7Mn_RPFrb4N3z6zZuRrFT/exec";
 
-/* ================= CAMPUSES (REALISTIC RADIUS) ================= */
+/* ================= CAMPUSES ================= */
 const CAMPUSES = [
-  { lat:28.676370, lon:77.112480, r:350 }, // BVIMR
-  { lat:28.675120, lon:77.113860, r:350 }, // BVICAM
-  { lat:28.678520, lon:77.111930, r:350 }  // BVCOE
+  { lat:28.676370, lon:77.112480, r:300 }, // BVIMR
+  { lat:28.675120, lon:77.113860, r:300 }, // BVICAM
+  { lat:28.678520, lon:77.111930, r:300 }  // BVCOE
 ];
 
 let photoData = "";
@@ -108,44 +108,82 @@ function distance(lat1, lon1, lat2, lon2){
 /* ================= LOCATION (FIXED & WORKING) ================= */
 function verifyLocation(){
   if(!navigator.geolocation){
-    location.innerHTML = "❌ GPS not supported";
+    location.innerHTML = "❌ <span class='err'>GPS not supported</span>";
+    allowed = false;
+    checkReady();
     return;
   }
 
   location.innerHTML = "📍 Checking location…";
+  allowed = false;
 
   navigator.geolocation.getCurrentPosition(
     pos=>{
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
-      const accuracy = pos.coords.accuracy; // meters
+      const accuracy = pos.coords.accuracy || 50; // meters, default to 50 if undefined
 
+      console.log("GPS Position:", { lat, lon, accuracy });
+      
       allowed = false;
+      let closestDistance = Infinity;
+      let closestCampus = null;
 
       for(const c of CAMPUSES){
         const d = distance(lat, lon, c.lat, c.lon);
+        console.log(`Campus check: distance=${Math.round(d)}m, radius=${c.r}m, accuracy=${Math.round(accuracy)}m`);
+        
+        if(d < closestDistance){
+          closestDistance = d;
+          closestCampus = c;
+        }
 
-        // ✅ REAL-WORLD LOGIC (distance adjusted by accuracy)
-        if ((d - accuracy) <= c.r) {
+        // ✅ LENIENT LOGIC: Account for GPS accuracy uncertainty
+        // Allow if distance is within (radius + accuracy + buffer)
+        // This ensures users inside campus are verified even with GPS inaccuracy
+        const buffer = 100; // Extra buffer for GPS variations and building interference
+        const effectiveRadius = c.r + accuracy + buffer;
+        
+        if (d <= effectiveRadius) {
           allowed = true;
+          console.log("✅ Location verified! Distance:", Math.round(d), "Effective radius:", Math.round(effectiveRadius));
           break;
         }
       }
 
       if(allowed){
         location.innerHTML =
-          "✅ <span class='ok'>Location Verified</span>";
+          "✅ <span class='ok'>Location Verified</span><br>" +
+          "<small>Distance: " + Math.round(closestDistance) + " m, Accuracy: " + Math.round(accuracy) + " m</small>";
       } else {
         location.innerHTML =
           "❌ <span class='err'>Location not verified</span><br>" +
-          "<small>GPS accuracy: " + Math.round(accuracy) + " m</small>";
+          "<small>Distance: " + Math.round(closestDistance) + " m, Accuracy: " + Math.round(accuracy) + " m</small><br>" +
+          "<small>Required: within " + (closestCampus ? closestCampus.r : 350) + " m radius</small>";
       }
 
       checkReady();
     },
-    ()=>{
-      location.innerHTML =
-        "❌ <span class='err'>Location permission denied</span>";
+    (err)=>{
+      console.error("Geolocation error:", err);
+      let errorMsg = "❌ <span class='err'>Location error: ";
+      switch(err.code){
+        case err.PERMISSION_DENIED:
+          errorMsg += "Permission denied</span>";
+          break;
+        case err.POSITION_UNAVAILABLE:
+          errorMsg += "Position unavailable</span>";
+          break;
+        case err.TIMEOUT:
+          errorMsg += "Request timeout</span>";
+          break;
+        default:
+          errorMsg += "Unknown error</span>";
+          break;
+      }
+      location.innerHTML = errorMsg;
+      allowed = false;
+      checkReady();
     },
     {
       enableHighAccuracy:true,
